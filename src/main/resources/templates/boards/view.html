@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/thymeleaf-extras-springsecurity5"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/layout1}">
+<div layout:fragment="content">
+    <div class="panel-heading">View Page</div>
+    <div class="panel-body">
+        <form th:action="@{/login}" method="post">
+        </form>
+
+        <div class="form-group">
+            <label>BNO</label> <input class="form-control" name="bno" th:value="${vo.bno}" readonly="readonly"/>
+        </div>
+
+        <div class="form-group">
+            <label>Title</label> <input class="form-control" name="title" th:value="${vo.title}" readonly="readonly"/>
+            <p class="help-block">Title text here.</p>
+        </div>
+
+        <div class="form-group">
+            <label>Content</label>
+            <textarea class="form-control" rows="3" name="content" th:text="${vo.content}" readonly="readonly" />
+        </div>
+
+        <div class="form-group">
+            <label>Writer</label> <input class="form-control" name="writer" th:value="${vo.writer}" readonly="readonly" />
+        </div>
+
+        <div class="form-group">
+            <label>RegDate</label> <input class="form-control" name="regDate" th:value="${#dates.format(vo.regdate,'yyyy-MM-dd')}" readonly="readonly" />
+        </div>
+
+        <div class="pull-right">
+            <div class="pull-right" th:with="uid=${#authentication.principal} eq 'anonymousUser'?'Guest':${#authentication.principal.member.uid}">
+                <a th:if="${uid} eq ${vo.writer}" th:href="@{modify(page=${pageVO.page}, size=${pageVO.size}, type=${pageVO.type}, keyword=${pageVO.keyword}, bno=${vo.bno})}" class="btn btn-default" id="goModBtn">Modify/Delte</a>
+                <a class="btn btn-primary" th:href="@{list(page=${pageVO.page}, size=${pageVO.size}, type=${pageVO.type}, keyword=${pageVO.keyword}, bno=${vo.bno})}">List</a>
+        </div>
+
+        <!-- reploes -->
+        <div class="container">
+            <table class="table table-striped table-bordered table-hover">
+                <thead>
+                <tr>
+                    <th>RNO</th>
+                    <th>REPLY TEXT</th>
+                    <th>REPLYER</th>
+                    <th>PEPLY DATE</th>
+                </tr>
+                </thead>
+                <tbody id="replyTable">
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pull-right">
+            <button class="btn" id="addReplyBtn">Add Reply</button>
+        </div>
+        <!-- Modal-->
+        <div id="myModal" class="modal fade" role="dialog">
+            <div class="modal-dialog">
+
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="moddal">&times;</button>
+                        <h4 class="modal-title">Modal Header</h4>
+                    </div>
+                    <div class="modal-body">
+                        <label>Reply Text</label>
+                        <input type="text" class="form-control" name="replyText" />
+                        <label>Replyer</label>
+                        <input type="text" class="form-control" name="replyer" readonly="readonly"/>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="delModalBtn" class="btn btn-danger">Delete</button>
+                        <button id="modalBtn" class="btn btn-info">Save</button>
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- End Modal -->
+    </div>
+</div>
+</div>
+    <!-- end fragment -->
+<th:block layout:fragment="script">
+    <script th:inline="javascript" th:src="@{'/js/reply.js'}"></script>
+    <script th:inline="javascript">
+        $(document).ready(function() {
+
+            var csrf = JSON.parse('[[${_csrf}]]');
+
+            var uid = [[${#authentication.principal} eq 'anonymousUser'?  null : ${#authentication.principal.member.uid}]];
+
+            $("#goModBtn").on('click', function (e) {
+                e.preventDefault();
+
+                if(uid == null) {
+                    if(confirm("로그인 할까요?")) {
+                        self.location = $(this).attr("href");
+                    }
+                } else {
+                    if(uid == [[${vo.writer}]]) {
+                        self.location = $(this).attr("href");
+                    } else {
+                        alert("작성자만 수정이나 삭제할 수 있습니다.");
+                    }
+                }
+            });
+
+            function afterAll(list) {
+                printList(list);
+                $("#myModal").modal("hide");
+                replyTextObj.val("");
+                replyerObj.val("");
+            }
+
+            //modal
+            var mode;
+
+            $("#addReplyBtn").on('click', function () {
+                if(uid == null) {
+                    if(confirm("로그인할까요?")) {
+                        self.location = [[@{/login}]]+"?dest=" + encodeURIComponent(self.location);
+                    }
+                    return;
+                }
+
+                replyerObj.val(uid);
+
+                $("#delModalBtn").hide();
+                $("#myModal").modal("show");
+                $(".modal-title").text("Add Reply");
+                mode = "ADD";
+            });
+
+            //reply save
+            var bno = [[${vo.bno}]];
+
+            var replyTextObj = $("input[name='replyText']");
+            var replyerObj = $("input[name='replyer']");
+
+            //reply save & modify
+            $("#modalBtn").click(function () {
+
+                var replyText = replyTextObj.val();
+                var replyer = replyerObj.val();
+
+                if (mode == "ADD") {
+
+                    var obj = {replyText:replyText, replyer:replyer, bno:bno, csrf:csrf};
+
+                    console.log(obj);
+
+                    replyMenanger.add(obj, function (list) {
+                        printList(list);
+                        alert("새로운 댓글이 추가되었습니다.");
+                        afterAll(list);
+                    });
+                }else if (mode == "MOD") {
+                    var obj = {replyText:replyText, replyer:replyer, bno:bno, rno:rno, csrf:csrf};
+
+                    replyMenanger.update(obj, function (list) {
+                        alert("댓글이 수정되었습니다.");
+                        afterAll(list);
+                    })
+                }
+            });
+
+            //reply delete
+            var rno;
+            $("#replyTable").on('click','tr',function (e) {
+
+                var tds = $(this).find('td');
+
+                console.log(tds);
+
+                rno = tds[0].innerHTML;
+                mode = "MOD";
+
+                replyTextObj.val(tds[1].innerHTML);
+                replyerObj.val(tds[2].innerHTML);
+                $("#delModalBtn").show();
+                $("#myModal").modal("show");
+                $(".modal-title").text("Modify/Delete Reply");
+
+                if(uid != tds[2].innerHTML.trim()) {
+                    $("#delModalBtn").hide();
+                    $("#modalBtn").hide();
+                }
+
+            });
+
+            $("#delModalBtn").on('click', function () {
+                var obj = {bno:bno, rno:rno, csrf:csrf};
+
+                replyMenanger.remove(obj, function (list) {
+                    printList(list);
+                    alert("댓글이 삭제되었습니다.");
+                    afterAll(list);
+                });
+            });
+
+
+            //Replies
+            (function () {
+                //test
+                /*replyMenanger.getAll([[${vo.bno}]], function (list) {
+                    console.log("list...." +list);
+                });*/
+
+                //load replies
+                replyMenanger.getAll([[${vo.bno}]], printList);
+            })();
+
+            function printList(list) {
+                var str = "";
+                var replyObj;
+                for (var i=0; i<list.length; i++){
+                    replyObj = list[i];
+
+                    str += "<tr>" +
+                        "<td>" + replyObj.rno + "</td>" +
+                        "<td>" + replyObj.replyText + "</td>" +
+                        "<td>" + replyObj.replyer + "</td>" +
+                        "<td>" + formatDate(replyObj.regdate) + "</td>" +
+                        "</tr>";
+                }
+                $("#replyTable").html(str);
+            }
+
+            function formatDate(timeValue) {
+                var date = new Date(timeValue);
+                return date.getFullYear()
+                    + "-" + (date.getMonth() + 1 >= 10 ? date.getMonth() + 1 : "0" +(date.getMonth()+1))
+                    + "-" + date.getDate()
+            }
+
+
+            });
+        console.log(replyMenanger);
+        </script>
+</th:block>
+</html>
